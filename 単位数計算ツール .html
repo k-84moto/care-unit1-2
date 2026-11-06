@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ケアマネジャー向け 単位数・自己負担額 簡易計算ツール</title>
+  <style>
+    :root {
+      --primary: #2b6cb0;
+      --primary-hover: #2c5282;
+      --bg-gray: #f7fafc;
+      --border-color: #e2e8f0;
+      --text-main: #2d3748;
+      --danger: #e53e3e;
+      --warning-bg: #fffaf0;
+      --warning-border: #dd6b20;
+    }
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    body { background-color: var(--bg-gray); color: var(--text-main); margin: 0; padding: 20px; line-height: 1.5; }
+    .container { max-width: 1000px; margin: 0 auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    h1 { color: var(--primary); font-size: 1.5rem; border-bottom: 2px solid var(--primary); padding-bottom: 8px; margin-top: 0; }
+    h2 { font-size: 1.2rem; color: #4a5568; margin-top: 20px; margin-bottom: 10px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; }
+    @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; font-weight: bold; margin-bottom: 4px; font-size: 0.9rem; }
+    select, input { width: 100%; padding: 8px; border: 1fr solid var(--border-color); border-radius: 4px; border: 1px solid #cbd5e0; font-size: 0.95rem; }
+    
+    .card { background: #edf2f7; padding: 15px; border-radius: 6px; margin-bottom: 20px; }
+    .limit-bar-bg { background: #cbd5e0; height: 12px; border-radius: 6px; overflow: hidden; margin-top: 8px; }
+    .limit-bar-fill { background: var(--primary); height: 100%; width: 0%; transition: width 0.3s, background-color 0.3s; }
+    
+    .alert-box { background: var(--warning-bg); border-left: 4px solid var(--warning-border); padding: 10px; margin-top: 10px; font-size: 0.9rem; color: #9c4221; display: none; }
+    
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9rem; }
+    th, td { border: 1px solid var(--border-color); padding: 8px; text-align: left; }
+    th { background: #edf2f7; font-weight: bold; }
+    td input, td select { padding: 4px; font-size: 0.85rem; }
+    
+    .btn { background: var(--primary); color: white; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn:hover { background: var(--primary-hover); }
+    .btn-danger { background: var(--danger); }
+    .btn-danger:hover { background: #c53030; }
+    .btn-add { background: #38a169; }
+    .btn-add:hover { background: #2f855a; }
+    .btn-print { background: #4a5568; }
+
+    .summary-box { background: #ebf8ff; border: 2px solid #3182ce; padding: 15px; border-radius: 6px; margin-top: 20px; }
+    .summary-title { font-weight: bold; color: #2b6cb0; font-size: 1.1rem; margin-bottom: 10px; }
+    .summary-amount { font-size: 1.6rem; font-weight: bold; color: #2c5282; }
+
+    /* 印刷用スタイル */
+    @media print {
+      body { background: white; padding: 0; }
+      .container { box-shadow: none; max-width: 100%; padding: 0; }
+      .no-print { display: none !important; }
+      th, td { border: 1px solid #000; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>ケアマネジャー向け 単位数・概算自己負担額 計算ツール</h1>
+
+  <!-- 1. 基本設定 -->
+  <div class="card">
+    <h2>1. 基本情報設定</h2>
+    <div class="grid-3">
+      <div class="form-group">
+        <label for="careLevel">要介護度</label>
+        <select id="careLevel" onchange="updateCalculations()">
+          <option value="support1">要支援 1 ( 5,032 単位)</option>
+          <option value="support2">要支援 2 (10,531 単位)</option>
+          <option value="care1" selected>要介護 1 (16,765 単位)</option>
+          <option value="care2">要介護 2 (19,705 単位)</option>
+          <option value="care3">要介護 3 (27,048 単位)</option>
+          <option value="care4">要介護 4 (30,938 単位)</option>
+          <option value="care5">要介護 5 (36,217 単位)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="regionRate">地域区分 (1単位単価)</label>
+        <select id="regionRate" onchange="updateCalculations()">
+          <option value="11.40">1級地 (11.40円)</option>
+          <option value="11.12">2級地 (11.12円)</option>
+          <option value="11.05">3級地 (11.05円)</option>
+          <option value="10.90">4級地 (10.90円)</option>
+          <option value="10.70">5級地 (10.70円)</option>
+          <option value="10.45">6級地 (10.45円)</option>
+          <option value="10.17">7級地 (10.17円)</option>
+          <option value="10.00" selected>その他 (10.00円)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="userRatio">利用者負担割合</label>
+        <select id="userRatio" onchange="updateCalculations()">
+          <option value="0.1" selected>1割負担</option>
+          <option value="0.2">2割負担</option>
+          <option value="0.3">3割負担</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. ショートステイ・実費関連設定 -->
+  <div class="card">
+    <h2>2. ショートステイ・実費・負担限度額設定</h2>
+    <div class="grid-3">
+      <div class="form-group">
+        <label for="burdenStage">食費・滞在費 負担限度額段階</label>
+        <select id="burdenStage" onchange="updateCalculations()">
+          <option value="4" selected>第4段階 (一般・課税世帯)</option>
+          <option value="3">第3段階 (非課税・年金収入等による)</option>
+          <option value="2">第2段階 (非課税・年金収入等80万円以下)</option>
+          <option value="1">第1段階 (生活保護・老齢福祉年金)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="ssDays">ショートステイ利用日数 (月)</label>
+        <input type="number" id="ssDays" value="0" min="0" max="31" onchange="updateCalculations()">
+      </div>
+      <div class="form-group">
+        <label for="daycareMeals">通所サービス 昼食日数 (月)</label>
+        <input type="number" id="daycareMeals" value="0" min="0" max="31" onchange="updateCalculations()">
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. サービス明細追加 -->
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+    <h2>3. 予定サービス明細</h2>
+    <div class="no-print">
+      <select id="presetSelect" style="width: auto; display: inline-block;">
+        <option value="">-- サービス・加算のプリセット選択 --</option>
+        <!-- 要介護用 -->
+        <optgroup label="【要介護】訪問介護">
+          <option value="訪問介護 身体20-30分|250|4">身体介護 20-30分 (250単位)</option>
+          <option value="訪問介護 身体30-60分|396|4">身体介護 30-60分 (396単位)</option>
+          <option value="訪問介護 生活45分以上|225|4">生活援助 45分以上 (225単位)</option>
+        </optgroup>
+        <optgroup label="【要介護】通所介護・通所リハ">
+          <option value="通所介護 5-6h|567|4">通所介護 5-6時間 (567単位)</option>
+          <option value="通所介護 7-8h|655|4">通所介護 7-8時間 (655単位)</option>
+          <option value="通所リハ 5-6h|600|4">通所リハ 5-6時間 (600単位)</option>
+          <option value="通所リハ 7-8h|710|4">通所リハ 7-8時間 (710単位)</option>
+        </optgroup>
+        <optgroup label="【要介護】ショートステイ (SS)">
+          <option value="SS 従来型個室|590|1">SS 従来型個室 (590単位/日)</option>
+          <option value="SS 多床室|660|1">SS 多床室 (660単位/日)</option>
+          <option value="SS ユニット型個室|680|1">SS ユニット型個室 (680単位/日)</option>
+          <option value="SS ユニット型準個室|680|1">SS ユニット型準個室 (680単位/日)</option>
+        </optgroup>
+        <optgroup label="【通所加算】">
+          <option value="入浴介助加算(Ⅰ)|40|4">入浴介助加算(Ⅰ) (40単位/日)</option>
+          <option value="入浴介助加算(Ⅱ)|55|4">入浴介助加算(Ⅱ) (55単位/日)</option>
+          <option value="個別機能訓練加算(Ⅰ)イ|56|4">個別機能訓練加算(Ⅰ)イ (56単位/日)</option>
+          <option value="口腔機能向上加算(Ⅰ)|150|1">口腔機能向上加算(Ⅰ) (150単位/回)</option>
+        </optgroup>
+      </select>
+      <button class="btn btn-add" onclick="addPresetRow()">追加</button>
+    </div>
+  </div>
+
+  <table id="serviceTable">
+    <thead>
+      <tr>
+        <th>サービス・加算名称</th>
+        <th style="width: 120px;">単位数</th>
+        <th style="width: 120px;">回数・日数</th>
+        <th style="width: 130px;">小計 (単位)</th>
+        <th class="no-print" style="width: 70px;">操作</th>
+      </tr>
+    </thead>
+    <tbody id="serviceTbody">
+      <!-- JavaScriptで動的追加 -->
+    </tbody>
+  </table>
+  <div class="no-print" style="margin-top: 10px;">
+    <button class="btn btn-add" onclick="addServiceRow('', 0, 1)">＋ 空白行を追加</button>
+  </div>
+
+  <!-- 限度額プログレスバー -->
+  <div style="margin-top: 25px;">
+    <div style="display: flex; justify-content: space-between; font-weight: bold;">
+      <span>区分支給限度基準額の消化状況</span>
+      <span id="limitText">0 / 0 単位 (0%)</span>
+    </div>
+    <div class="limit-bar-bg">
+      <div id="limitBar" class="limit-bar-fill"></div>
+    </div>
+    <div id="alertBox" class="alert-box">
+      ⚠️ 区分支給限度基準額を <strong><span id="overUnits">0</span> 単位オーバー</strong> しています。超過分は全額自己負担となります。
+    </div>
+  </div>
+
+  <!-- 集計結果 -->
+  <div class="summary-box">
+    <div class="summary-title">ご家族お支払額・費用概算シート</div>
+    <div class="grid-2">
+      <div>
+        <p style="margin: 4px 0;"><strong>総計画単位数:</strong> <span id="totalUnits">0</span> 単位</p>
+        <p style="margin: 4px 0;"><strong>保険利用内 単位数:</strong> <span id="insuranceUnits">0</span> 単位</p>
+        <p style="margin: 4px 0;"><strong>保険利用総費用額:</strong> <span id="totalCost">0</span> 円</p>
+        <p style="margin: 4px 0; color: #c53030;"><strong>① 介護保険自己負担額:</strong> <span id="userCost">0</span> 円</p>
+      </div>
+      <div>
+        <p style="margin: 4px 0;"><strong>② 超過分自己負担額:</strong> <span id="overCost">0</span> 円</p>
+        <p style="margin: 4px 0;"><strong>③ ショート滞在・食費実費:</strong> <span id="ssCost">0</span> 円</p>
+        <p style="margin: 4px 0;"><strong>④ 通所系 昼食代等実費:</strong> <span id="daycareCost">0</span> 円</p>
+        <hr style="border: 0; border-top: 1px solid #cbd5e0; margin: 8px 0;">
+        <div class="summary-amount">
+          ご家庭負担目安: <span id="finalFamilyCost">0</span> 円 /月
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 印刷ボタン -->
+  <div class="no-print" style="margin-top: 20px; text-align: right;">
+    <button class="btn btn-print" onclick="window.print()">🖨️ 印刷 / PDF出力</button>
+  </div>
+</div>
+
+<script>
+  // 限度額マスタ
+  const LIMITS = {
+    support1: 5032, support2: 10531,
+    care1: 16765, care2: 19705, care3: 27048, care4: 30938, care5: 36217
+  };
+
+  // 初期化時にサンプルデータ投入
+  window.onload = function() {
+    addServiceRow("通所介護 7-8時間", 655, 4);
+    addServiceRow("入浴介助加算(Ⅰ)", 40, 4);
+    addServiceRow("訪問介護 身体30-60分", 396, 4);
+    updateCalculations();
+  };
+
+  function addServiceRow(name = "", unit = 0, count = 1) {
+    const tbody = document.getElementById("serviceTbody");
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td><input type="text" class="row-name" value="${name}" oninput="updateCalculations()"></td>
+      <td><input type="number" class="row-unit" value="${unit}" min="0" onchange="updateCalculations()"></td>
+      <td><input type="number" class="row-count" value="${count}" min="0" onchange="updateCalculations()"></td>
+      <td><span class="row-subtotal">0</span> 単位</td>
+      <td class="no-print"><button class="btn btn-danger" style="padding: 2px 8px; font-size:0.8rem;" onclick="removeRow(this)">削除</button></td>
+    `;
+    tbody.appendChild(tr);
+    updateCalculations();
+  }
+
+  function addPresetRow() {
+    const select = document.getElementById("presetSelect");
+    if (!select.value) return;
+
+    const [name, unit, count] = select.value.split("|");
+    addServiceRow(name, parseInt(unit), parseInt(count));
+    select.value = "";
+  }
+
+  function removeRow(btn) {
+    const tr = btn.closest("tr");
+    tr.remove();
+    updateCalculations();
+  }
+
+  function updateCalculations() {
+    const careLevel = document.getElementById("careLevel").value;
+    const maxLimit = LIMITS[careLevel];
+    const rate = parseFloat(document.getElementById("regionRate").value);
+    const ratio = parseFloat(document.getElementById("userRatio").value);
+
+    // 明細計算
+    let totalUnits = 0;
+    const rows = document.querySelectorAll("#serviceTbody tr");
+    rows.forEach(row => {
+      const unit = parseInt(row.querySelector(".row-unit").value) || 0;
+      const count = parseInt(row.querySelector(".row-count").value) || 0;
+      const subtotal = unit * count;
+      row.querySelector(".row-subtotal").textContent = subtotal.toLocaleString();
+      totalUnits += subtotal;
+    });
+
+    // 区分限度額との比較
+    let insuranceUnits = totalUnits;
+    let overUnits = 0;
+
+    if (totalUnits > maxLimit) {
+      insuranceUnits = maxLimit;
+      overUnits = totalUnits - maxLimit;
+    }
+
+    // 金額計算
+    const totalCost = Math.floor(insuranceUnits * rate);
+    const userCost = Math.floor(totalCost * ratio);
+    const overCost = Math.floor(overUnits * rate);
+
+    // ショートステイ・実費計算
+    const ssDays = parseInt(document.getElementById("ssDays").value) || 0;
+    const stage = parseInt(document.getElementById("burdenStage").value);
+    
+    // 段階別の食費・滞在費（概算標準日額）
+    let ssDailyCost = 2500; // 第4段階標準目安
+    if (stage === 1) ssDailyCost = 300;
+    else if (stage === 2) ssDailyCost = 780;
+    else if (stage === 3) ssDailyCost = 1300;
+
+    const ssCost = ssDays * ssDailyCost;
+
+    // 通所昼食代（1食700円計算）
+    const daycareMeals = parseInt(document.getElementById("daycareMeals").value) || 0;
+    const daycareCost = daycareMeals * 700;
+
+    // 総ご家庭負担
+    const finalFamilyCost = userCost + overCost + ssCost + daycareCost;
+
+    // UI反映
+    document.getElementById("totalUnits").textContent = totalUnits.toLocaleString();
+    document.getElementById("insuranceUnits").textContent = insuranceUnits.toLocaleString();
+    document.getElementById("totalCost").textContent = totalCost.toLocaleString();
+    document.getElementById("userCost").textContent = userCost.toLocaleString();
+    document.getElementById("overCost").textContent = overCost.toLocaleString();
+    document.getElementById("ssCost").textContent = ssCost.toLocaleString();
+    document.getElementById("daycareCost").textContent = daycareCost.toLocaleString();
+    document.getElementById("finalFamilyCost").textContent = finalFamilyCost.toLocaleString();
+
+    // プログレスバー・警告
+    const percent = Math.min(Math.round((totalUnits / maxLimit) * 100), 100);
+    const limitBar = document.getElementById("limitBar");
+    const limitText = document.getElementById("limitText");
+    const alertBox = document.getElementById("alertBox");
+
+    limitBar.style.width = percent + "%";
+    limitText.textContent = `${totalUnits.toLocaleString()} / ${maxLimit.toLocaleString()} 単位 (${percent}%)`;
+
+    if (overUnits > 0) {
+      limitBar.style.backgroundColor = "var(--danger)";
+      document.getElementById("overUnits").textContent = overUnits.toLocaleString();
+      alertBox.style.display = "block";
+    } else {
+      limitBar.style.backgroundColor = "var(--primary)";
+      alertBox.style.display = "none";
+    }
+  }
+</script>
+
+</body>
+</html>
